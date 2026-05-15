@@ -298,7 +298,7 @@ cron.schedule('0 9 * * *', runReminderCheck, {
   timezone: 'America/New_York'
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
   console.log('Reminder check scheduled for 9am ET daily');
 });
