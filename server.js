@@ -26,13 +26,36 @@ const sheets = google.sheets({
   auth: GOOGLE_API_KEY
 });
 
-const COLUMN_MAP = {
-  AS: { deadline: 'AT', team: 'Team 1' },
-  BK: { deadline: 'BL', team: 'Team 2' },
-  BM: { deadline: 'BN', team: 'Team 3' },
-  BQ: { deadline: 'BR', team: 'Team 4' },
-  BS: { deadline: 'BT', team: 'Team 5' }
-};
+// Column headers mapped to their deadline columns and group labels
+// Groups: AR (All Routes), ABP, ABR
+const COLUMN_MAP = [
+  { initialsCol: 'All Routes Group A', deadlineCol: 'AR A Status', group: 'AR' },
+  { initialsCol: 'All Routes Group B', deadlineCol: 'AR B Status', group: 'AR' },
+  { initialsCol: 'All Routes Review',  deadlineCol: 'AR Rev Status', group: 'AR' },
+  { initialsCol: 'ABP A Home Off',     deadlineCol: 'ABP HA Status', group: 'ABP' },
+  { initialsCol: 'ABP A Away Off',     deadlineCol: 'ABP AA Status', group: 'ABP' },
+  { initialsCol: 'ABR A Home Off',     deadlineCol: 'ABR HA Status', group: 'ABR' },
+  { initialsCol: 'ABR A Away Off',     deadlineCol: 'ABR AA Status', group: 'ABR' }
+];
+
+// Determine which sheet to use based on current date.
+// Sheet weeks: os7 = May 6-12, os8 = May 13-19, os9 = May 20-26, etc.
+// We switch to the new sheet on Wednesday each week, so that Monday
+// assignments from the previous game week are still caught on Tuesday.
+function getCurrentSheetName() {
+  const BASE_SHEET = 8;
+  const BASE_WEDNESDAY = new Date('2026-05-13'); // First Wednesday we switch to os8
+  const now = new Date();
+  const diffMs = now - BASE_WEDNESDAY;
+  if (diffMs < 0) {
+    console.log('Current sheet: os7');
+    return 'os7'; // Before May 13, use os7
+  }
+  const diffWeeks = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
+  const sheetNum = BASE_SHEET + diffWeeks;
+  console.log(`Current sheet: os${sheetNum}`);
+  return 'os' + sheetNum;
+}
 
 const INITIALS_TO_NAME = {
   'AAB': 'Aaron Bloch',
@@ -75,7 +98,7 @@ const INITIALS_TO_NAME = {
   'RJO': 'Ronald Jones',
   'RCO': 'Ryan Cooley',
   'RMS': 'Ryan Smith',
-  'SMC': 'Sam Mcgaw',
+  'SMC': 'Sam McGaw',
   'SIC': 'Simon Chester',
   'TCA': 'Taylor Cassady',
   'TB':  'Tim Beckman',
@@ -121,11 +144,12 @@ async function getSlackUserByInitials(initials) {
 
 async function readScheduleSheet() {
   try {
+    const sheetName = getCurrentSheetName();
+    console.log(`Reading sheet: ${sheetName}`);
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: 'os7!A:BT'
+      range: `${sheetName}!A:BZ`
     });
-    
     return response.data.values || [];
   } catch (error) {
     console.error('Error reading Google Sheet:', error);
@@ -149,88 +173,87 @@ async function findAssignmentsForToday() {
   const data = await readScheduleSheet();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
+
+  // assignments[initials] = { AR: count, ABP: count, ABR: count }
   const assignments = {};
-  
+
   const colIndexMap = {};
   if (data[0]) {
     data[0].forEach((col, idx) => {
-      colIndexMap[col] = idx;
+      colIndexMap[col.trim()] = idx;
     });
   }
-  
-  for (const [initialsCol, config] of Object.entries(COLUMN_MAP)) {
-    const initialsColIdx = colIndexMap[initialsCol];
-    const deadlineColIdx = colIndexMap[config.deadline];
-    
+
+  for (const config of COLUMN_MAP) {
+    const initialsColIdx = colIndexMap[config.initialsCol];
+    const deadlineColIdx = colIndexMap[config.deadlineCol];
+
     if (initialsColIdx === undefined || deadlineColIdx === undefined) {
-      console.log(`Warning: Could not find columns for ${initialsCol}`);
+      console.log(`Warning: Could not find columns: '${config.initialsCol}' or '${config.deadlineCol}'`);
       continue;
     }
-    
+
     for (let rowIdx = 1; rowIdx < data.length; rowIdx++) {
-      const initials = data[rowIdx][initialsColIdx];
-      const deadlineStr = data[rowIdx][deadlineColIdx];
-      
+      const initials = (data[rowIdx][initialsColIdx] || '').trim();
+      const deadlineStr = (data[rowIdx][deadlineColIdx] || '').trim();
+
       if (initials && deadlineStr) {
         const deadline = getDateFromCell(deadlineStr);
         if (deadline && isSameDay(deadline, today)) {
           if (!assignments[initials]) {
-            assignments[initials] = [];
+            assignments[initials] = { AR: 0, ABP: 0, ABR: 0 };
           }
-          assignments[initials].push({
-            team: config.team,
-            deadline: deadlineStr,
-            row: rowIdx
-          });
+          assignments[initials][config.group]++;
         }
       }
     }
   }
-  
+
   return assignments;
 }
 
-async function sendSlackReminder(userId, initials, count, team) {
+async function sendSlackReminder(userId, initials, groups) {
   try {
+    // Build a human-readable breakdown of assignments
+    const parts = [];
+    if (groups.AR  > 0) parts.push(`${groups.AR} AR assignment${groups.AR  !== 1 ? 's' : ''}`);
+    if (groups.ABP > 0) parts.push(`${groups.ABP} ABP assignment${groups.ABP !== 1 ? 's' : ''}`);
+    if (groups.ABR > 0) parts.push(`${groups.ABR} ABR assignment${groups.ABR !== 1 ? 's' : ''}`);
+
+    const total = (groups.AR || 0) + (groups.ABP || 0) + (groups.ABR || 0);
+    const breakdown = parts.join(' and ');
+    const groupKeys = Object.keys(groups).filter(k => groups[k] > 0).join('-');
+    const date = new Date().toISOString().split('T')[0];
+
+    const messageText = `Hey, just a gentle reminder that you have ${breakdown} today. Are you OK to do that by the deadline? 👀`;
+
     const blocks = [
       {
         type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `Hey, just a gentle reminder that you have ${count} assignment${count !== 1 ? 's' : ''} today. Are you OK to do that by the deadline? 👀`
-        }
+        text: { type: 'mrkdwn', text: messageText }
       },
       {
         type: 'actions',
         elements: [
           {
             type: 'button',
-            text: {
-              type: 'plain_text',
-              text: 'Got it'
-            },
-            action_id: `acknowledge_${initials}_${team}_${new Date().toISOString().split('T')[0]}`,
-            value: `${initials}`,
+            text: { type: 'plain_text', text: 'Got it' },
+            action_id: `acknowledge_${initials}_${groupKeys}_${date}`,
+            value: initials,
             style: 'primary'
           }
         ]
       }
     ];
-    
+
     const response = await axios.post(
       'https://slack.com/api/chat.postMessage',
-      {
-        channel: userId,
-        blocks: blocks
-      },
-      {
-        headers: { Authorization: `Bearer ${SLACK_TOKEN}` }
-      }
+      { channel: userId, blocks },
+      { headers: { Authorization: `Bearer ${SLACK_TOKEN}` } }
     );
-    
+
     if (response.data.ok) {
-      console.log(`Message sent to ${initials} for ${team}`);
+      console.log(`Message sent to ${initials}: ${breakdown}`);
       return response.data.ts;
     } else {
       console.error(`Error sending message to ${initials}:`, response.data.error);
@@ -289,12 +312,11 @@ async function runReminderCheck() {
     return;
   }
   
-  for (const [initials, tasks] of Object.entries(assignments)) {
+  for (const [initials, groups] of Object.entries(assignments)) {
     const userId = await getSlackUserByInitials(initials);
-    
+
     if (userId) {
-      const teamList = tasks.map(t => t.team).join(', ');
-      await sendSlackReminder(userId, initials, tasks.length, teamList);
+      await sendSlackReminder(userId, initials, groups);
     } else {
       console.log(`Could not find Slack user for ${initials}`);
       await notifyZoltan(`⚠️ Could not find Slack user for initials: ${initials}`);
