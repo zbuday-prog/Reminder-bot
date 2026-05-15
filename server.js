@@ -241,26 +241,41 @@ async function runReminderCheck() {
 }
 
 app.post('/slack/actions', async (req, res) => {
-  const payload = JSON.parse(req.body.payload);
+  const body = req.body;
   
-  if (payload.type === 'block_actions') {
-    const action = payload.actions[0];
+  // Handle Slack's URL verification challenge
+  if (body.type === 'url_verification') {
+    res.status(200).send(body.challenge);
+    return;
+  }
+  
+  // Handle button clicks
+  if (body.type === 'block_actions' || (body.payload && typeof body.payload === 'string')) {
+    let payload;
     
-    if (action.action_id.startsWith('acknowledge_')) {
-      const parts = action.action_id.split('_');
-      const initials = parts[1];
-      const team = parts[2];
-      const date = parts[3];
+    if (body.payload && typeof body.payload === 'string') {
+      payload = JSON.parse(body.payload);
+    } else {
+      payload = body;
+    }
+    
+    if (payload.type === 'block_actions') {
+      const action = payload.actions[0];
       
-      await logAcknowledgment(initials, new Date().toISOString(), team);
-      
-      await notifyZoltan(`📌 ${initials} acknowledged their assignment reminder for ${date} (${team})`);
-      
-      res.send('');
+      if (action.action_id.startsWith('acknowledge_')) {
+        const parts = action.action_id.split('_');
+        const initials = parts[1];
+        const team = parts[2];
+        const date = parts[3];
+        
+        await logAcknowledgment(initials, new Date().toISOString(), team);
+        
+        await notifyZoltan(`📌 ${initials} acknowledged their assignment reminder for ${date} (${team})`);
+      }
     }
   }
   
-  res.send('');
+  res.status(200).send('');
 });
 
 app.get('/health', (req, res) => {
