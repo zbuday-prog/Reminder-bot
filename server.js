@@ -157,22 +157,60 @@ async function readScheduleSheet() {
   }
 }
 
-function getDateFromCell(dateStr) {
-  if (!dateStr) return null;
-  const date = new Date(dateStr);
-  return isNaN(date.getTime()) ? null : date;
-}
-
 function isSameDay(date1, date2) {
   return date1.getFullYear() === date2.getFullYear() &&
          date1.getMonth() === date2.getMonth() &&
          date1.getDate() === date2.getDate();
 }
 
+// Get the start date (Wednesday) of the current sheet's week
+function getSheetWeekStartDate() {
+  const BASE_WEDNESDAY = new Date('2026-05-13'); // May 13 is Wednesday, start of os8
+  const now = new Date();
+  const diffMs = now - BASE_WEDNESDAY;
+  
+  let weeksOffset = 0;
+  if (diffMs >= 0) {
+    weeksOffset = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
+  } else {
+    weeksOffset = -1; // os7 week
+  }
+  
+  // os7 starts Wednesday May 6, os8 starts Wednesday May 13, os9 starts Wednesday May 20, etc.
+  const weekStartMs = BASE_WEDNESDAY.getTime() + (weeksOffset * 7 * 24 * 60 * 60 * 1000);
+  return new Date(weekStartMs);
+}
+
+// Convert day name + time string to a date
+// e.g., "SAT 17:00" in os8 week (May 13-19 Wed-Tue) → May 16 at 5pm
+function parseDayString(dayString, weekStartDate) {
+  if (!dayString || typeof dayString !== 'string') return null;
+  
+  const dayMap = { 'WED': 0, 'THU': 1, 'FRI': 2, 'SAT': 3, 'SUN': 4, 'MON': 5, 'TUE': 6 };
+  const match = dayString.trim().match(/^(WED|THU|FRI|SAT|SUN|MON|TUE)\s+(\d{1,2}):(\d{2})$/i);
+  
+  if (!match) return null;
+  
+  const dayName = match[1].toUpperCase();
+  const dayOffset = dayMap[dayName];
+  
+  if (dayOffset === undefined) return null;
+  
+  // Create a date for that day in the current week (week starts Wednesday)
+  const resultDate = new Date(weekStartDate);
+  resultDate.setDate(resultDate.getDate() + dayOffset);
+  resultDate.setHours(parseInt(match[2]), parseInt(match[3]), 0, 0);
+  
+  return resultDate;
+}
+
 async function findAssignmentsForToday() {
   const data = await readScheduleSheet();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
 
   // assignments[initials] = { AR: count, ABP: count, ABR: count }
   const assignments = {};
@@ -183,6 +221,10 @@ async function findAssignmentsForToday() {
       colIndexMap[col.trim()] = idx;
     });
   }
+
+  // Get the week start date to parse day names correctly
+  const weekStartDate = getSheetWeekStartDate();
+  console.log(`Sheet week starts: ${weekStartDate.toDateString()}, looking for assignments on ${tomorrow.toDateString()}`);
 
   for (const config of COLUMN_MAP) {
     const initialsColIdx = colIndexMap[config.initialsCol];
@@ -198,12 +240,14 @@ async function findAssignmentsForToday() {
       const deadlineStr = (data[rowIdx][deadlineColIdx] || '').trim();
 
       if (initials && deadlineStr) {
-        const deadline = getDateFromCell(deadlineStr);
-        if (deadline && isSameDay(deadline, today)) {
+        // Parse day name + time (e.g., "SAT 17:00") into an actual date
+        const deadline = parseDayString(deadlineStr, weekStartDate);
+        if (deadline && isSameDay(deadline, tomorrow)) {
           if (!assignments[initials]) {
             assignments[initials] = { AR: 0, ABP: 0, ABR: 0 };
           }
           assignments[initials][config.group]++;
+          console.log(`Found assignment: ${initials} on ${deadlineStr} (${deadline.toDateString()})`);
         }
       }
     }
