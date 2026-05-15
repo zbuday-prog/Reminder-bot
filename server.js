@@ -245,46 +245,41 @@ async function runReminderCheck() {
   await notifyZoltan(`✅ Daily reminder check completed. Sent reminders to ${Object.keys(assignments).length} person/people.`);
 }
 
-app.post('/slack/actions', async (req, res) => {
+app.post('/slack/actions', (req, res) => {
   try {
-    let body = req.body;
+    console.log('Slack request received');
+    console.log('Body:', JSON.stringify(req.body));
     
-    // Handle Slack's URL verification challenge (comes as JSON)
-    if (body.type === 'url_verification') {
-      console.log('Received URL verification challenge');
-      res.status(200).send(body.challenge);
-      return;
+    const body = req.body;
+
+    // Handle URL verification challenge
+    if (body && body.type === 'url_verification') {
+      console.log('Sending challenge:', body.challenge);
+      return res.status(200).json({ challenge: body.challenge });
     }
-    
-    // Handle button clicks (comes as URL-encoded with payload field)
-    if (body.payload) {
+
+    // Handle button clicks
+    if (body && body.payload) {
       const payload = typeof body.payload === 'string' ? JSON.parse(body.payload) : body.payload;
-      
       if (payload.type === 'block_actions' && payload.actions && payload.actions.length > 0) {
         const action = payload.actions[0];
-        
         if (action.action_id && action.action_id.startsWith('acknowledge_')) {
           const parts = action.action_id.split('_');
           const initials = parts[1];
           const team = parts[2];
           const date = parts[3];
-          
           console.log(`Button clicked: ${initials} - ${team} - ${date}`);
-          
-          await logAcknowledgment(initials, new Date().toISOString(), team);
-          
-          await notifyZoltan(`📌 ${initials} acknowledged their assignment reminder for ${date} (${team})`);
-          
-          res.status(200).send('');
-          return;
+          // Run async tasks without blocking response
+          logAcknowledgment(initials, new Date().toISOString(), team).catch(console.error);
+          notifyZoltan(`📌 ${initials} acknowledged their assignment reminder for ${date} (${team})`).catch(console.error);
         }
       }
     }
-    
-    res.status(200).send('');
-  } catch (error) {
-    console.error('Error handling Slack action:', error);
-    res.status(200).send('');
+
+    return res.status(200).send('OK');
+  } catch (err) {
+    console.error('Error in /slack/actions:', err);
+    return res.status(200).send('OK');
   }
 });
 
