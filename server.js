@@ -34,31 +34,90 @@ const COLUMN_MAP = {
   BS: { deadline: 'BT', team: 'Team 5' }
 };
 
+const INITIALS_TO_NAME = {
+  'AAB': 'Aaron Bloch',
+  'ALH': 'Alex Hellwig',
+  'AI':  'Andrew Ites',
+  'BS':  'Ben Stockwell',
+  'BM':  'Billy Moy',
+  'BMO': 'Brady Morrison',
+  'BGE': 'Brett Geerling',
+  'BV':  'Bryson Vesnaver',
+  'CGA': 'Cameron Gale',
+  'CMI': 'Cody Milardo',
+  'CRE': 'Conor Redmond',
+  'DF':  'Dave Fiorella',
+  'DAH': 'David Holden',
+  'EA':  'Ezekiel Ayers',
+  'GME': 'Garrett Mehal',
+  'JGU': 'Jake Gudoian',
+  'JMN': 'Jeff McCann',
+  'JWY': 'Jim Wyman',
+  'JK':  'John Kosko',
+  'JCA': 'Jordan Casper',
+  'JP':  'Jordan Plocher',
+  'JL':  'Josh Liskiewitz',
+  'JUW': 'Julien Wilson',
+  'KC':  'Kevin Connaghan',
+  'KE':  'Khaled Elsayed',
+  'LGR': 'Lauren Gray',
+  'LSH': 'Logan Schocknesse',
+  'LPA': 'Luke Paldino',
+  'MBA': 'Mark Baker',
+  'MAC': 'Martyn Carlisle',
+  'MC':  'Matt Claassen',
+  'MT':  'Matt Tichenor',
+  'MRO': 'Matthew Ross',
+  'MLP': 'Michael Preville',
+  'MM':  'Michael Mountford',
+  'NLO': 'Nathan Lowes',
+  'NAK': 'Nick Akridge',
+  'RJO': 'Ronald Jones',
+  'RCO': 'Ryan Cooley',
+  'RMS': 'Ryan Smith',
+  'SMC': 'Sam Mcgaw',
+  'SIC': 'Simon Chester',
+  'TCA': 'Taylor Cassady',
+  'TB':  'Tim Beckman',
+  'TL':  'Trevor Lynch',
+  'WDL': 'Winston Dimel',
+  'ZB':  'Zoltan Buday'
+};
+
 async function getSlackUserByInitials(initials) {
   try {
+    const fullName = INITIALS_TO_NAME[initials.toUpperCase()];
+    if (!fullName) {
+      console.log(`No name mapping found for initials: ${initials}`);
+      return null;
+    }
+
     const response = await axios.post(
       'https://slack.com/api/users.list',
       {},
-      {
-        headers: { Authorization: `Bearer ${SLACK_TOKEN}` }
-      }
+      { headers: { Authorization: `Bearer ${SLACK_TOKEN}` } }
     );
-    
+
     const users = response.data.members;
     for (const user of users) {
       const profile = user.profile || {};
-      // Check display_name first, then real_name
-      const displayName = profile.display_name || profile.real_name || '';
-      if (displayName.toUpperCase().includes(initials.toUpperCase())) {
+      const realName = (profile.real_name || '').toLowerCase();
+      const displayName = (profile.display_name || '').toLowerCase();
+      const search = fullName.toLowerCase();
+      if (realName === search || displayName === search) {
+        console.log(`Matched ${initials} -> ${fullName} -> Slack ID: ${user.id}`);
         return user.id;
       }
     }
+
+    console.log(`Could not find Slack user for: ${fullName}`);
     return null;
   } catch (error) {
     console.error('Error fetching Slack users:', error);
     return null;
   }
 }
+
 
 async function readScheduleSheet() {
   try {
