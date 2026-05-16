@@ -16,14 +16,30 @@ app.use(express.json());
 
 const SLACK_TOKEN = process.env.SLACK_TOKEN;
 const SHEET_ID = process.env.SHEET_ID;
-const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 const TRACKING_SHEET_ID = process.env.TRACKING_SHEET_ID;
 const ZOLTAN_USER_ID = process.env.ZOLTAN_USER_ID;
 const PORT = process.env.PORT || 3000;
 
+// Parse service account credentials from environment variable
+let serviceAccountCredentials;
+try {
+  const credentialsJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (!credentialsJson) {
+    throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON environment variable not set');
+  }
+  serviceAccountCredentials = JSON.parse(credentialsJson);
+  console.log('Service account credentials loaded successfully');
+} catch (error) {
+  console.error('Error parsing service account credentials:', error);
+  process.exit(1);
+}
+
 const sheets = google.sheets({
   version: 'v4',
-  auth: GOOGLE_API_KEY
+  auth: new google.auth.GoogleAuth({
+    credentials: serviceAccountCredentials,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+  })
 });
 
 // Column headers mapped to their deadline columns and group labels
