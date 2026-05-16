@@ -220,6 +220,7 @@ async function findAssignmentsForToday() {
     data[0].forEach((col, idx) => {
       colIndexMap[col.trim()] = idx;
     });
+    console.log('Found columns:', Object.keys(colIndexMap).slice(0, 50)); // Log first 50 column names
   }
 
   // Get the week start date to parse day names correctly
