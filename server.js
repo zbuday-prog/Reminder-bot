@@ -413,8 +413,14 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK' });
 });
 
+app.get('/run-check', async (req, res) => {
+  console.log('Manual reminder check triggered (GET)');
+  await runReminderCheck();
+  res.status(200).json({ status: 'Check completed' });
+});
+
 app.post('/run-check', async (req, res) => {
-  console.log('Manual reminder check triggered');
+  console.log('Manual reminder check triggered (POST)');
   await runReminderCheck();
   res.status(200).json({ status: 'Check completed' });
 });
