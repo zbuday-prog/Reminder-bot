@@ -141,15 +141,6 @@ async function getSlackUserByInitials(initials) {
     const searchLower = fullName.toLowerCase();
     const searchParts = searchLower.split(' ');
     
-    // Log first 10 users for debugging (only on first call per session)
-    if (initials === 'MT') {
-      console.log('Sample Slack users for debugging:');
-      users.slice(0, 10).forEach(u => {
-        const profile = u.profile || {};
-        console.log(`  ${u.id}: realName="${profile.real_name}", displayName="${profile.display_name}"`);
-      });
-    }
-    
     for (const user of users) {
       const profile = user.profile || {};
       const realName = (profile.real_name || '').toLowerCase();
@@ -464,8 +455,8 @@ app.post('/run-check', async (req, res) => {
   res.status(200).json({ status: 'Check completed' });
 });
 
-// Schedule for 9:45am ET daily (testing time)
-cron.schedule('45 9 * * *', runReminderCheck, {
+// Schedule for 8am ET daily
+cron.schedule('0 8 * * *', runReminderCheck, {
   timezone: 'America/New_York'
 });
 
