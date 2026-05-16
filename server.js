@@ -295,7 +295,7 @@ async function sendSlackReminder(userId, initials, groups) {
     const groupKeys = Object.keys(groups).filter(k => groups[k] > 0).join('-');
     const date = new Date().toISOString().split('T')[0];
 
-    const messageText = `Hey, just a gentle reminder that you have ${breakdown} today. Are you OK to do that by the deadline? 👀`;
+    const messageText = `Hey, it's Zoltan. Just a gentle reminder that you have ${breakdown} today. Are you OK to do that by the deadline? 👀`;
 
     const blocks = [
       {
