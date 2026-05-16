@@ -224,9 +224,6 @@ async function findAssignmentsForToday() {
   const data = await readScheduleSheet();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
 
   // assignments[initials] = { AR: count, ABP: count, ABR: count }
   const assignments = {};
@@ -241,7 +238,7 @@ async function findAssignmentsForToday() {
 
   // Get the week start date to parse day names correctly
   const weekStartDate = getSheetWeekStartDate();
-  console.log(`Sheet week starts: ${weekStartDate.toDateString()}, looking for assignments on ${tomorrow.toDateString()}`);
+  console.log(`Sheet week starts: ${weekStartDate.toDateString()}, looking for assignments on ${today.toDateString()}`);
 
   for (const config of COLUMN_MAP) {
     const initialsColIdx = colIndexMap[config.initialsCol];
@@ -259,7 +256,7 @@ async function findAssignmentsForToday() {
       if (initials && deadlineStr) {
         // Parse day name + time (e.g., "SAT 17:00") into an actual date
         const deadline = parseDayString(deadlineStr, weekStartDate);
-        if (deadline && isSameDay(deadline, tomorrow)) {
+        if (deadline && isSameDay(deadline, today)) {
           if (!assignments[initials]) {
             assignments[initials] = { AR: 0, ABP: 0, ABR: 0 };
           }
@@ -373,18 +370,23 @@ async function runReminderCheck() {
     return;
   }
   
+  const sentTo = [];
   for (const [initials, groups] of Object.entries(assignments)) {
     const userId = await getSlackUserByInitials(initials);
 
     if (userId) {
       await sendSlackReminder(userId, initials, groups);
+      sentTo.push(`${initials} (${INITIALS_TO_NAME[initials]})`);
     } else {
       console.log(`Could not find Slack user for ${initials}`);
       await notifyZoltan(`⚠️ Could not find Slack user for initials: ${initials}`);
     }
   }
   
-  await notifyZoltan(`✅ Daily reminder check completed. Sent reminders to ${Object.keys(assignments).length} person/people.`);
+  const reminderSummary = sentTo.length > 0 
+    ? `✅ Daily reminder check completed. Sent reminders to: ${sentTo.join(', ')}`
+    : `ℹ️ Daily reminder check completed. No Slack users found for any assignments.`;
+  await notifyZoltan(reminderSummary);
 }
 
 app.post('/slack/actions', (req, res) => {
