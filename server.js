@@ -104,7 +104,7 @@ const INITIALS_TO_NAME = {
   'LPA': 'Luke Paldino',
   'MBA': 'Mark Baker',
   'MAC': 'Martyn Carlisle',
-  'MC':  'Matthew Claassen',
+  'MC':  'Matt Claassen',
   'MT':  'Matthew Tichenor',
   'MRO': 'Matthew Ross',
   'MLP': 'Michael Preville',
@@ -138,14 +138,35 @@ async function getSlackUserByInitials(initials) {
     );
 
     const users = response.data.members;
+    const searchLower = fullName.toLowerCase();
+    const searchParts = searchLower.split(' ');
+    
+    // Log first 10 users for debugging (only on first call per session)
+    if (initials === 'MT') {
+      console.log('Sample Slack users for debugging:');
+      users.slice(0, 10).forEach(u => {
+        const profile = u.profile || {};
+        console.log(`  ${u.id}: realName="${profile.real_name}", displayName="${profile.display_name}"`);
+      });
+    }
+    
     for (const user of users) {
       const profile = user.profile || {};
       const realName = (profile.real_name || '').toLowerCase();
       const displayName = (profile.display_name || '').toLowerCase();
-      const search = fullName.toLowerCase();
-      if (realName === search || displayName === search) {
+      
+      // Try exact match first
+      if (realName === searchLower || displayName === searchLower) {
         console.log(`Matched ${initials} -> ${fullName} -> Slack ID: ${user.id}`);
         return user.id;
+      }
+      
+      // Try partial match (e.g., "Matt" matches "Matthew")
+      for (const part of searchParts) {
+        if (part.length > 2 && (realName.includes(part) || displayName.includes(part))) {
+          console.log(`Matched ${initials} -> ${fullName} -> Slack ID: ${user.id} (partial match)`);
+          return user.id;
+        }
       }
     }
 
