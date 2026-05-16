@@ -419,8 +419,8 @@ app.post('/run-check', async (req, res) => {
   res.status(200).json({ status: 'Check completed' });
 });
 
-// Schedule for 9am ET daily
-cron.schedule('0 9 * * *', runReminderCheck, {
+// Schedule for 9:45am ET daily (testing time)
+cron.schedule('45 9 * * *', runReminderCheck, {
   timezone: 'America/New_York'
 });
 
