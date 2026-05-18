@@ -97,7 +97,15 @@ async function getSlackUsersCache() {
     if (response.data.ok) {
       slackUsersCache = response.data.members;
       slackUsersCacheTime = now;
-      console.log(`Fetched Slack users (cached for 1 hour)`);
+      
+      // Log all users for debugging
+      console.log('=== ALL SLACK USERS ===');
+      slackUsersCache.forEach(user => {
+        const profile = user.profile || {};
+        console.log(`${user.id}: realName="${profile.real_name}", displayName="${profile.display_name}"`);
+      });
+      console.log('=== END SLACK USERS ===');
+      
       return slackUsersCache;
     } else {
       console.error('Slack users.list error:', response.data.error);
