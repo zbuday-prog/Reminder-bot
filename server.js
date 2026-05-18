@@ -86,31 +86,35 @@ async function getSlackUsersCache() {
     return slackUsersCache;
   }
   
-  // Fetch fresh user list
+  // Fetch fresh user list (with pagination support)
   try {
-    const response = await axios.post(
-      'https://slack.com/api/users.list',
-      {},
-      { headers: { Authorization: `Bearer ${SLACK_TOKEN}` } }
-    );
+    let allUsers = [];
+    let cursor = '';
     
-    if (response.data.ok) {
-      slackUsersCache = response.data.members;
-      slackUsersCacheTime = now;
+    do {
+      const params = { limit: 200 };
+      if (cursor) params.cursor = cursor;
       
-      // Log all users for debugging
-      console.log('=== ALL SLACK USERS ===');
-      slackUsersCache.forEach(user => {
-        const profile = user.profile || {};
-        console.log(`${user.id}: realName="${profile.real_name}", displayName="${profile.display_name}"`);
-      });
-      console.log('=== END SLACK USERS ===');
+      const response = await axios.post(
+        'https://slack.com/api/users.list',
+        params,
+        { headers: { Authorization: `Bearer ${SLACK_TOKEN}` } }
+      );
       
-      return slackUsersCache;
-    } else {
-      console.error('Slack users.list error:', response.data.error);
-      return slackUsersCache || [];
-    }
+      if (!response.data.ok) {
+        console.error('Slack users.list error:', response.data.error);
+        break;
+      }
+      
+      allUsers = allUsers.concat(response.data.members || []);
+      cursor = response.data.response_metadata?.next_cursor || '';
+    } while (cursor);
+    
+    slackUsersCache = allUsers;
+    slackUsersCacheTime = now;
+    console.log(`Fetched ${allUsers.length} Slack users (cached for 1 hour)`);
+    
+    return slackUsersCache;
   } catch (error) {
     console.error('Error fetching Slack users:', error.message);
     return slackUsersCache || [];
@@ -182,13 +186,8 @@ async function getSlackUserByInitials(initials) {
     
     for (const user of users) {
       const profile = user.profile || {};
-      const realName = (profile.real_name || '').toLowerCase();
-      const displayName = (profile.display_name || '').toLowerCase();
-      
-      // Debug logging for EA and ZB
-      if ((initials === 'EA' || initials === 'ZB') && (realName.includes('ezekiel') || realName.includes('zoltan') || displayName.includes('ezekiel') || displayName.includes('zoltan'))) {
-        console.log(`DEBUG ${initials}: realName="${profile.real_name}", displayName="${profile.display_name}"`);
-      }
+      const realName = (profile.real_name || '').trim().toLowerCase();
+      const displayName = (profile.display_name || '').trim().toLowerCase();
       
       // Try exact match first
       if (realName === searchLower || displayName === searchLower) {
