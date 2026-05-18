@@ -177,6 +177,11 @@ async function getSlackUserByInitials(initials) {
       const realName = (profile.real_name || '').toLowerCase();
       const displayName = (profile.display_name || '').toLowerCase();
       
+      // Debug logging for EA and ZB
+      if ((initials === 'EA' || initials === 'ZB') && (realName.includes('ezekiel') || realName.includes('zoltan') || displayName.includes('ezekiel') || displayName.includes('zoltan'))) {
+        console.log(`DEBUG ${initials}: realName="${profile.real_name}", displayName="${profile.display_name}"`);
+      }
+      
       // Try exact match first
       if (realName === searchLower || displayName === searchLower) {
         return user.id;
