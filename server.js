@@ -416,7 +416,21 @@ async function runReminderCheck() {
   console.log('Running daily reminder check...');
   
   // Pre-fetch Slack users once before processing assignments
-  await getSlackUsersCache();
+  // If rate limited, wait 30 seconds and try once more
+  let users = await getSlackUsersCache();
+  if (!users || users.length === 0) {
+    console.log('Slack users fetch failed, waiting 30 seconds before retry...');
+    await new Promise(resolve => setTimeout(resolve, 30000));
+    users = await getSlackUsersCache();
+  }
+  
+  if (!users || users.length === 0) {
+    console.log('Could not fetch Slack users, aborting check');
+    await notifyZoltan('⚠️ Could not fetch Slack users (rate limited). Please try again later.');
+    return;
+  }
+  
+  console.log(`Using ${users.length} Slack users for lookup`);
   
   const assignments = await findAssignmentsForToday();
   
