@@ -517,12 +517,18 @@ app.post('/run-check', async (req, res) => {
   res.status(200).json({ status: 'Check completed' });
 });
 
-// Schedule for 9am ET daily
-cron.schedule('0 9 * * *', runReminderCheck, {
+// Schedule for 8am ET daily
+cron.schedule('0 8 * * *', runReminderCheck, {
   timezone: 'America/New_York'
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`Server running on port ${PORT}`);
-  console.log('Reminder check scheduled for 9am ET daily');
+  console.log('Reminder check scheduled for 8am ET daily');
+  
+  // Pre-fetch Slack users at startup (wait 5 seconds first)
+  setTimeout(async () => {
+    console.log('Pre-fetching Slack users at startup...');
+    await getSlackUsersCache();
+  }, 5000);
 });
