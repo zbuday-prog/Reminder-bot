@@ -108,6 +108,10 @@ async function getSlackUsersCache() {
       
       allUsers = allUsers.concat(response.data.members || []);
       cursor = response.data.response_metadata?.next_cursor || '';
+      
+      // Wait 2 seconds between pagination calls to avoid rate limiting
+      if (cursor) await new Promise(resolve => setTimeout(resolve, 2000));
+      
     } while (cursor);
     
     slackUsersCache = allUsers;
