@@ -415,6 +415,9 @@ async function notifyZoltan(message) {
 async function runReminderCheck() {
   console.log('Running daily reminder check...');
   
+  // Pre-fetch Slack users once before processing assignments
+  await getSlackUsersCache();
+  
   const assignments = await findAssignmentsForToday();
   
   if (Object.keys(assignments).length === 0) {
