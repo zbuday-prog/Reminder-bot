@@ -73,6 +73,42 @@ function getCurrentSheetName() {
   return 'os' + sheetNum;
 }
 
+// Cache for Slack users to avoid rate limiting
+let slackUsersCache = null;
+let slackUsersCacheTime = 0;
+const CACHE_DURATION_MS = 60 * 60 * 1000; // 1 hour
+
+async function getSlackUsersCache() {
+  const now = Date.now();
+  
+  // Return cached users if still valid
+  if (slackUsersCache && (now - slackUsersCacheTime) < CACHE_DURATION_MS) {
+    return slackUsersCache;
+  }
+  
+  // Fetch fresh user list
+  try {
+    const response = await axios.post(
+      'https://slack.com/api/users.list',
+      {},
+      { headers: { Authorization: `Bearer ${SLACK_TOKEN}` } }
+    );
+    
+    if (response.data.ok) {
+      slackUsersCache = response.data.members;
+      slackUsersCacheTime = now;
+      console.log(`Fetched Slack users (cached for 1 hour)`);
+      return slackUsersCache;
+    } else {
+      console.error('Slack users.list error:', response.data.error);
+      return slackUsersCache || [];
+    }
+  } catch (error) {
+    console.error('Error fetching Slack users:', error.message);
+    return slackUsersCache || [];
+  }
+}
+
 const INITIALS_TO_NAME = {
   'AAB': 'Aaron Bloch',
   'ALH': 'Alex Hellwig',
@@ -127,17 +163,12 @@ async function getSlackUserByInitials(initials) {
   try {
     const fullName = INITIALS_TO_NAME[initials.toUpperCase()];
     if (!fullName) {
-      console.log(`No name mapping found for initials: ${initials}`);
+      console.log(`No name mapping for: ${initials}`);
       return null;
     }
 
-    const response = await axios.post(
-      'https://slack.com/api/users.list',
-      {},
-      { headers: { Authorization: `Bearer ${SLACK_TOKEN}` } }
-    );
-
-    const users = response.data.members;
+    // Use cached user list
+    const users = await getSlackUsersCache();
     const searchLower = fullName.toLowerCase();
     const searchParts = searchLower.split(' ');
     
@@ -148,23 +179,21 @@ async function getSlackUserByInitials(initials) {
       
       // Try exact match first
       if (realName === searchLower || displayName === searchLower) {
-        console.log(`Matched ${initials} -> ${fullName} -> Slack ID: ${user.id}`);
         return user.id;
       }
       
       // Try partial match (e.g., "Matt" matches "Matthew")
       for (const part of searchParts) {
         if (part.length > 2 && (realName.includes(part) || displayName.includes(part))) {
-          console.log(`Matched ${initials} -> ${fullName} -> Slack ID: ${user.id} (partial match)`);
           return user.id;
         }
       }
     }
 
-    console.log(`Could not find Slack user for: ${fullName}`);
+    console.log(`❌ ${initials} (${fullName}) not found in Slack`);
     return null;
   } catch (error) {
-    console.error('Error fetching Slack users:', error);
+    console.error('Error getting Slack user:', error.message);
     return null;
   }
 }
@@ -295,7 +324,7 @@ async function sendSlackReminder(userId, initials, groups) {
     const groupKeys = Object.keys(groups).filter(k => groups[k] > 0).join('-');
     const date = new Date().toISOString().split('T')[0];
 
-    const messageText = `Hey, it's Zoltan. Just a gentle reminder that you have ${breakdown} today. Are you OK to do that by the deadline? 👀`;
+    const messageText = `Hey, just a gentle reminder that you have ${breakdown} today. Are you OK to do that by the deadline? 👀`;
 
     const blocks = [
       {
@@ -455,8 +484,8 @@ app.post('/run-check', async (req, res) => {
   res.status(200).json({ status: 'Check completed' });
 });
 
-// Schedule for 8am ET daily
-cron.schedule('0 8 * * *', runReminderCheck, {
+// Schedule for 9am ET daily
+cron.schedule('0 9 * * *', runReminderCheck, {
   timezone: 'America/New_York'
 });
 
