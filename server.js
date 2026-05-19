@@ -387,20 +387,29 @@ async function sendSlackReminder(userId, initials, groups) {
 
 async function logAcknowledgment(initials, timestamp, team) {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    console.log(`Logging acknowledgment: ${initials} - ${team}`);
     
-    await sheets.spreadsheets.values.append({
+    // Create auth with service account
+    const auth = new google.auth.GoogleAuth({
+      credentials: serviceAccountCredentials,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+
+    const sheetsApi = google.sheets({ version: 'v4', auth });
+
+    const result = await sheetsApi.spreadsheets.values.append({
       spreadsheetId: TRACKING_SHEET_ID,
-      range: 'Acknowledgments!A:F',
+      range: 'Sheet1!A:F',
       valueInputOption: 'USER_ENTERED',
       resource: {
-        values: [[today, initials, team, 'Acknowledged', new Date().toISOString(), 'Button click']]
+        values: [[new Date().toISOString().split('T')[0], initials, team, 'Acknowledged', new Date().toISOString(), 'Button click']]
       }
     });
     
-    console.log(`Logged acknowledgment for ${initials} - ${team}`);
+    console.log(`✅ Acknowledgment logged for ${initials} - ${team}`);
+    return result;
   } catch (error) {
-    console.error('Error logging to tracking sheet:', error);
+    console.error('Error logging to tracking sheet:', error.message);
   }
 }
 
