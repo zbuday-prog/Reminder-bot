@@ -194,10 +194,12 @@ async function getSlackUserByInitials(initials) {
     const email = `${nameParts[0][0]}${nameParts[1]}@teamworks.com`.toLowerCase();
     
     try {
-      const response = await axios.post(
+      const response = await axios.get(
         'https://slack.com/api/users.lookupByEmail',
-        { email },
-        { headers: { Authorization: `Bearer ${SLACK_TOKEN}` } }
+        {
+          params: { email },
+          headers: { Authorization: `Bearer ${SLACK_TOKEN}` }
+        }
       );
 
       if (response.data.ok) {
