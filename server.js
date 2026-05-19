@@ -183,33 +183,36 @@ async function getSlackUserByInitials(initials) {
       return null;
     }
 
-    // Use cached user list
-    const users = await getSlackUsersCache();
-    const searchLower = fullName.toLowerCase();
-    const searchParts = searchLower.split(' ');
-    
-    for (const user of users) {
-      const profile = user.profile || {};
-      const realName = (profile.real_name || '').trim().toLowerCase();
-      const displayName = (profile.display_name || '').trim().toLowerCase();
-      
-      // Try exact match first
-      if (realName === searchLower || displayName === searchLower) {
-        return user.id;
-      }
-      
-      // Try partial match (e.g., "Matt" matches "Matthew")
-      for (const part of searchParts) {
-        if (part.length > 2 && (realName.includes(part) || displayName.includes(part))) {
-          return user.id;
-        }
-      }
+    // Generate email from initials: first letter of first name + last name + @teamworks.com
+    // e.g., MT (Matthew Tichenor) -> mtichenor@teamworks.com
+    const nameParts = fullName.split(' ');
+    if (nameParts.length < 2) {
+      console.log(`Could not parse name for ${initials}: "${fullName}"`);
+      return null;
     }
+    
+    const email = `${nameParts[0][0]}${nameParts[1]}@teamworks.com`.toLowerCase();
+    
+    try {
+      const response = await axios.post(
+        'https://slack.com/api/users.lookupByEmail',
+        { email },
+        { headers: { Authorization: `Bearer ${SLACK_TOKEN}` } }
+      );
 
-    console.log(`❌ ${initials} (${fullName}) not found in Slack`);
-    return null;
+      if (response.data.ok) {
+        console.log(`✅ Found ${initials} (${fullName}) via email: ${email} → ${response.data.user.id}`);
+        return response.data.user.id;
+      } else {
+        console.log(`❌ ${initials} (${fullName}) - email ${email} not found: ${response.data.error}`);
+        return null;
+      }
+    } catch (error) {
+      console.error(`Error looking up ${email}:`, error.message);
+      return null;
+    }
   } catch (error) {
-    console.error('Error getting Slack user:', error.message);
+    console.error('Error in getSlackUserByInitials:', error.message);
     return null;
   }
 }
@@ -418,23 +421,6 @@ async function notifyZoltan(message) {
 
 async function runReminderCheck() {
   console.log('Running daily reminder check...');
-  
-  // Pre-fetch Slack users once before processing assignments
-  // If rate limited, wait 30 seconds and try once more
-  let users = await getSlackUsersCache();
-  if (!users || users.length === 0) {
-    console.log('Slack users fetch failed, waiting 30 seconds before retry...');
-    await new Promise(resolve => setTimeout(resolve, 30000));
-    users = await getSlackUsersCache();
-  }
-  
-  if (!users || users.length === 0) {
-    console.log('Could not fetch Slack users, aborting check');
-    await notifyZoltan('⚠️ Could not fetch Slack users (rate limited). Please try again later.');
-    return;
-  }
-  
-  console.log(`Using ${users.length} Slack users for lookup`);
   
   const assignments = await findAssignmentsForToday();
   
