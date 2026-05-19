@@ -522,13 +522,7 @@ cron.schedule('0 8 * * *', runReminderCheck, {
   timezone: 'America/New_York'
 });
 
-app.listen(PORT, '0.0.0.0', async () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
   console.log('Reminder check scheduled for 8am ET daily');
-  
-  // Pre-fetch Slack users at startup (wait 5 seconds first)
-  setTimeout(async () => {
-    console.log('Pre-fetching Slack users at startup...');
-    await getSlackUsersCache();
-  }, 5000);
 });
