@@ -460,7 +460,7 @@ async function runReminderCheck() {
   await notifyZoltan(reminderSummary);
 }
 
-app.post('/slack/actions', (req, res) => {
+app.post('/slack/actions', async (req, res) => {
   try {
     console.log('Slack request received');
     console.log('Body:', JSON.stringify(req.body));
