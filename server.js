@@ -484,6 +484,39 @@ app.post('/slack/actions', (req, res) => {
           const team = parts[2];
           const date = parts[3];
           console.log(`Button clicked: ${initials} - ${team} - ${date}`);
+          
+          // Update the message to show "Confirmed" button
+          const confirmedBlocks = [
+            {
+              type: 'section',
+              text: { type: 'mrkdwn', text: payload.message.blocks[0].text.text }
+            },
+            {
+              type: 'actions',
+              elements: [
+                {
+                  type: 'button',
+                  text: { type: 'plain_text', text: '✅ Confirmed' },
+                  action_id: `acknowledge_${initials}_${team}_${date}_confirmed`,
+                  value: initials,
+                  style: 'default',  // Gray out the button
+                  disabled: true
+                }
+              ]
+            }
+          ];
+          
+          // Update the message in Slack
+          await axios.post(
+            'https://slack.com/api/chat.update',
+            {
+              channel: payload.channel.id,
+              ts: payload.message.ts,
+              blocks: confirmedBlocks
+            },
+            { headers: { Authorization: `Bearer ${SLACK_TOKEN}` } }
+          ).catch(err => console.error('Error updating message:', err.message));
+          
           // Run async tasks without blocking response
           logAcknowledgment(initials, new Date().toISOString(), team).catch(console.error);
           notifyZoltan(`📌 ${initials} acknowledged their assignment reminder for ${date} (${team})`).catch(console.error);
