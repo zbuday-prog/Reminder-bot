@@ -185,13 +185,20 @@ async function getSlackUserByInitials(initials) {
 
     // Generate email from initials: first letter of first name + last name + @teamworks.com
     // e.g., MT (Matthew Tichenor) -> mtichenor@teamworks.com
+    // Exception: RMS (Ryan Smith) -> ryan.smith@teamworks.com
     const nameParts = fullName.split(' ');
     if (nameParts.length < 2) {
       console.log(`Could not parse name for ${initials}: "${fullName}"`);
       return null;
     }
     
-    const email = `${nameParts[0][0]}${nameParts[1]}@teamworks.com`.toLowerCase();
+    let email;
+    if (initials.toUpperCase() === 'RMS') {
+      // Special case for Ryan Smith
+      email = 'ryan.smith@teamworks.com';
+    } else {
+      email = `${nameParts[0][0]}${nameParts[1]}@teamworks.com`.toLowerCase();
+    }
     
     try {
       const response = await axios.get(
