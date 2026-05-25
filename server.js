@@ -493,12 +493,8 @@ app.post('/slack/actions', async (req, res) => {
           console.log(`Button clicked: ${initials} - ${team} - ${date}`);
           
           // Update the message to show "Confirmed" button
-          // Keep the original blocks but replace the button
           const confirmedBlocks = [
-            {
-              type: 'section',
-              text: { type: 'mrkdwn', text: payload.message.text }
-            },
+            payload.message.blocks[0],  // Keep the original text block
             {
               type: 'actions',
               elements: [
@@ -506,7 +502,8 @@ app.post('/slack/actions', async (req, res) => {
                   type: 'button',
                   text: { type: 'plain_text', text: '✅ Confirmed', emoji: true },
                   value: initials,
-                  disabled: true
+                  disabled: true,
+                  action_id: `confirmed_${initials}_${team}_${date}`
                 }
               ]
             }
