@@ -493,23 +493,19 @@ app.post('/slack/actions', async (req, res) => {
           console.log(`Button clicked: ${initials} - ${team} - ${date}`);
           
           // Update the message to show "Confirmed" button
-          // Get the original message text from the payload
-          const originalText = payload.message.text || 'Hey, it\'s Zoltan. Just a gentle reminder that you have assignments today. Are you OK to do that by the deadline? 👀';
-          
+          // Keep the original blocks but replace the button
           const confirmedBlocks = [
             {
               type: 'section',
-              text: { type: 'mrkdwn', text: originalText }
+              text: { type: 'mrkdwn', text: payload.message.text }
             },
             {
               type: 'actions',
               elements: [
                 {
                   type: 'button',
-                  text: { type: 'plain_text', text: '✅ Confirmed' },
-                  action_id: `acknowledge_${initials}_${team}_${date}_confirmed`,
+                  text: { type: 'plain_text', text: '✅ Confirmed', emoji: true },
                   value: initials,
-                  style: 'default',  // Gray out the button
                   disabled: true
                 }
               ]
