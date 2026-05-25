@@ -493,10 +493,13 @@ app.post('/slack/actions', async (req, res) => {
           console.log(`Button clicked: ${initials} - ${team} - ${date}`);
           
           // Update the message to show "Confirmed" button
+          // Get the original message text from the payload
+          const originalText = payload.message.text || 'Hey, it\'s Zoltan. Just a gentle reminder that you have assignments today. Are you OK to do that by the deadline? 👀';
+          
           const confirmedBlocks = [
             {
               type: 'section',
-              text: { type: 'mrkdwn', text: payload.message.blocks[0].text.text }
+              text: { type: 'mrkdwn', text: originalText }
             },
             {
               type: 'actions',
@@ -514,15 +517,25 @@ app.post('/slack/actions', async (req, res) => {
           ];
           
           // Update the message in Slack
-          await axios.post(
-            'https://slack.com/api/chat.update',
-            {
-              channel: payload.channel.id,
-              ts: payload.message.ts,
-              blocks: confirmedBlocks
-            },
-            { headers: { Authorization: `Bearer ${SLACK_TOKEN}` } }
-          ).catch(err => console.error('Error updating message:', err.message));
+          try {
+            const updateResponse = await axios.post(
+              'https://slack.com/api/chat.update',
+              {
+                channel: payload.channel.id,
+                ts: payload.message.ts,
+                blocks: confirmedBlocks
+              },
+              { headers: { Authorization: `Bearer ${SLACK_TOKEN}` } }
+            );
+            
+            if (updateResponse.data.ok) {
+              console.log(`✅ Message updated successfully for ${initials}`);
+            } else {
+              console.error(`❌ Failed to update message: ${updateResponse.data.error}`);
+            }
+          } catch (err) {
+            console.error(`Error updating message for ${initials}:`, err.message);
+          }
           
           // Run async tasks without blocking response
           logAcknowledgment(initials, new Date().toISOString(), team).catch(console.error);
