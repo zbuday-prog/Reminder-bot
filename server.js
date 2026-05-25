@@ -509,22 +509,37 @@ app.post('/slack/actions', async (req, res) => {
             }
           ];
           
-          // Update the message in Slack
+          // Update the message using response_url (designed for button responses)
           try {
             const updateResponse = await axios.post(
-              'https://slack.com/api/chat.update',
+              payload.response_url,
               {
-                channel: payload.channel.id,
-                ts: payload.message.ts,
-                blocks: confirmedBlocks
-              },
-              { headers: { Authorization: `Bearer ${SLACK_TOKEN}` } }
+                replace_original: true,
+                blocks: [
+                  {
+                    type: 'section',
+                    text: { type: 'mrkdwn', text: payload.message.blocks[0].text.text }
+                  },
+                  {
+                    type: 'actions',
+                    elements: [
+                      {
+                        type: 'button',
+                        text: { type: 'plain_text', text: '✅ Confirmed', emoji: true },
+                        value: initials,
+                        disabled: true,
+                        action_id: `confirmed_${initials}_${team}_${date}`
+                      }
+                    ]
+                  }
+                ]
+              }
             );
             
-            if (updateResponse.data.ok) {
+            if (updateResponse.data === 'ok' || updateResponse.status === 200) {
               console.log(`✅ Message updated successfully for ${initials}`);
             } else {
-              console.error(`❌ Failed to update message: ${updateResponse.data.error}`);
+              console.error(`❌ Failed to update message:`, updateResponse.data);
             }
           } catch (err) {
             console.error(`Error updating message for ${initials}:`, err.message);
