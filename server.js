@@ -527,7 +527,8 @@ app.post('/slack/actions', async (req, res) => {
                     type: 'button',
                     text: { type: 'plain_text', text: '✅ Confirmed', emoji: true },
                     value: initials,
-                    disabled: true
+                    action_id: `already_confirmed_${initials}_${team}_${date}`
+                    // No style = gray button, no disabled = valid block
                   }
                 ]
               }
