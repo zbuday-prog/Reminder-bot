@@ -55,22 +55,45 @@ const COLUMN_MAP = [
 ];
 
 // Determine which sheet to use based on current date.
-// Sheet weeks: os7 = May 6-12, os8 = May 13-19, os9 = May 20-26, etc.
+// New naming scheme starting the week of Aug 19, 2026:
+//   Aug 19-25   -> p2
+//   Aug 26-Sep1 -> p3c0
+//   Sep 2-8     -> c1
+//   Sep 9-15    -> n1c2
+//   Sep 16-22   -> n2c3
+//   ... then n{X}c{X+1}, both numbers incrementing by 1 each week.
 // We switch to the new sheet on Wednesday each week, so that Monday
 // assignments from the previous game week are still caught on Tuesday.
-function getCurrentSheetName() {
-  const BASE_SHEET = 8;
-  const BASE_WEDNESDAY = new Date('2026-05-13'); // First Wednesday we switch to os8
+const SHEET_BASE_WEDNESDAY = new Date('2026-08-19'); // Week of "p2"
+
+function getWeeksSinceSheetBase() {
   const now = new Date();
-  const diffMs = now - BASE_WEDNESDAY;
-  if (diffMs < 0) {
-    console.log('Current sheet: os7');
-    return 'os7'; // Before May 13, use os7
+  const diffMs = now - SHEET_BASE_WEDNESDAY;
+  let diffWeeks = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
+  if (diffWeeks < 0) diffWeeks = 0; // Before Aug 19, default to the first sheet
+  return diffWeeks;
+}
+
+function getCurrentSheetName() {
+  const diffWeeks = getWeeksSinceSheetBase();
+
+  let sheetName;
+  if (diffWeeks === 0) {
+    sheetName = 'p2';
+  } else if (diffWeeks === 1) {
+    sheetName = 'p3c0';
+  } else if (diffWeeks === 2) {
+    sheetName = 'c1';
+  } else {
+    // From here on: n{X}c{X+1}, both incrementing by 1 each week.
+    // diffWeeks 3 -> n1c2, diffWeeks 4 -> n2c3, etc.
+    const n = diffWeeks - 2;
+    const c = diffWeeks - 1;
+    sheetName = `n${n}c${c}`;
   }
-  const diffWeeks = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
-  const sheetNum = BASE_SHEET + diffWeeks;
-  console.log(`Current sheet: os${sheetNum}`);
-  return 'os' + sheetNum;
+
+  console.log(`Current sheet: ${sheetName} (${diffWeeks} week(s) since Aug 19 base)`);
+  return sheetName;
 }
 
 // Cache for Slack users to avoid rate limiting
@@ -902,18 +925,13 @@ async function getSlackUserByInitials(initials) {
 
 
 async function readScheduleSheet() {
-  try {
-    const sheetName = getCurrentSheetName();
-    console.log(`Reading sheet: ${sheetName}`);
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: `${sheetName}!A:BZ`
-    });
-    return response.data.values || [];
-  } catch (error) {
-    console.error('Error reading Google Sheet:', error);
-    return [];
-  }
+  const sheetName = getCurrentSheetName();
+  console.log(`Reading sheet: ${sheetName}`);
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: `${sheetName}!A:BZ`
+  });
+  return response.data.values || [];
 }
 
 function isSameDay(date1, date2) {
@@ -924,19 +942,8 @@ function isSameDay(date1, date2) {
 
 // Get the start date (Wednesday) of the current sheet's week
 function getSheetWeekStartDate() {
-  const BASE_WEDNESDAY = new Date('2026-05-13'); // May 13 is Wednesday, start of os8
-  const now = new Date();
-  const diffMs = now - BASE_WEDNESDAY;
-  
-  let weeksOffset = 0;
-  if (diffMs >= 0) {
-    weeksOffset = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
-  } else {
-    weeksOffset = -1; // os7 week
-  }
-  
-  // os7 starts Wednesday May 6, os8 starts Wednesday May 13, os9 starts Wednesday May 20, etc.
-  const weekStartMs = BASE_WEDNESDAY.getTime() + (weeksOffset * 7 * 24 * 60 * 60 * 1000);
+  const weeksOffset = getWeeksSinceSheetBase();
+  const weekStartMs = SHEET_BASE_WEDNESDAY.getTime() + (weeksOffset * 7 * 24 * 60 * 60 * 1000);
   return new Date(weekStartMs);
 }
 
@@ -968,6 +975,16 @@ async function findAssignmentsForToday() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  // If the sheet came back with no rows at all (e.g. the tab doesn't exist,
+  // or is empty), that's a different problem than "no assignments today" —
+  // let the caller know so it doesn't get reported as a normal empty day.
+  if (!data || data.length === 0) {
+    const sheetName = getCurrentSheetName();
+    const err = new Error(`Sheet '${sheetName}' returned no data — it may not exist or may be empty.`);
+    err.sheetName = sheetName;
+    throw err;
+  }
+
   // assignments[initials] = { AR: count, ABP: count, ABR: count }
   const assignments = {};
 
@@ -982,6 +999,19 @@ async function findAssignmentsForToday() {
   // Get the week start date to parse day names correctly
   const weekStartDate = getSheetWeekStartDate();
   console.log(`Sheet week starts: ${weekStartDate.toDateString()}, looking for assignments on ${today.toDateString()}`);
+
+  // If NONE of the expected columns were found, the sheet's headers likely
+  // changed or this is the wrong tab — that's a config problem, not "no
+  // assignments today", so surface it distinctly.
+  const anyColumnFound = COLUMN_MAP.some(config =>
+    colIndexMap[config.initialsCol] !== undefined && colIndexMap[config.deadlineCol] !== undefined
+  );
+  if (!anyColumnFound) {
+    const sheetName = getCurrentSheetName();
+    const err = new Error(`None of the expected columns were found on sheet '${sheetName}'. Headers may have changed.`);
+    err.sheetName = sheetName;
+    throw err;
+  }
 
   for (const config of COLUMN_MAP) {
     const initialsColIdx = colIndexMap[config.initialsCol];
@@ -1113,9 +1143,16 @@ async function notifyZoltan(message) {
 
 async function runReminderCheck() {
   console.log('Running daily reminder check...');
-  
-  const assignments = await findAssignmentsForToday();
-  
+
+  let assignments;
+  try {
+    assignments = await findAssignmentsForToday();
+  } catch (error) {
+    console.error('Error during reminder check:', error);
+    await notifyZoltan(`🚨 Daily reminder check FAILED — this is not "no assignments today", something is actually broken: ${error.message}`);
+    return;
+  }
+
   if (Object.keys(assignments).length === 0) {
     console.log('No assignments found for today');
     await notifyZoltan(`ℹ️ Daily reminder check ran but found no assignments for today.`);
@@ -1266,12 +1303,12 @@ app.post('/run-check', async (req, res) => {
   res.status(200).json({ status: 'Check completed' });
 });
 
-// Schedule for 5am ET daily
-cron.schedule('0 5 * * *', runReminderCheck, {
+// Schedule for 5:10am ET daily (temporary, to test today's run)
+cron.schedule('10 5 * * *', runReminderCheck, {
   timezone: 'America/New_York'
 });
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
-  console.log('Reminder check scheduled for 5am ET daily');
+  console.log('Reminder check scheduled for 5:10am ET daily');
 });
