@@ -837,6 +837,7 @@ async function getSlackUserByInitials(initials) {
       // Exceptions: 
       //   RMS (Ryan Smith) -> ryan.smith@teamworks.com
       //   JGU (Jake Gudoian) -> rgudoian@teamworks.com
+      //   BM (Billy Moy) -> wmoy@teamworks.com (in the system as William Moy)
       const nameParts = fullName.split(' ');
       if (nameParts.length < 2) {
         console.log(`Could not parse name for ${initials}: "${fullName}"`);
@@ -850,6 +851,9 @@ async function getSlackUserByInitials(initials) {
       } else if (upperInitials === 'JGU') {
         // Special case for Jake Gudoian
         email = 'rgudoian@teamworks.com';
+      } else if (upperInitials === 'BM') {
+        // Special case for Billy Moy (in the system as William Moy)
+        email = 'wmoy@teamworks.com';
       } else {
         email = `${nameParts[0][0]}${nameParts[1]}@teamworks.com`.toLowerCase();
       }
@@ -1165,7 +1169,8 @@ async function runReminderCheck() {
 
     if (userId) {
       await sendSlackReminder(userId, initials, groups);
-      sentTo.push(`${initials} (${INITIALS_TO_NAME[initials]})`);
+      const displayName = INITIALS_TO_NAME[initials.toUpperCase()] || NEW_STAFF[initials.toUpperCase()]?.name || initials;
+      sentTo.push(`${initials} (${displayName})`);
     } else {
       console.log(`Could not find Slack user for ${initials}`);
       await notifyZoltan(`⚠️ Could not find Slack user for initials: ${initials}`);
@@ -1303,12 +1308,12 @@ app.post('/run-check', async (req, res) => {
   res.status(200).json({ status: 'Check completed' });
 });
 
-// Schedule for 5:10am ET daily (temporary, to test today's run)
-cron.schedule('10 5 * * *', runReminderCheck, {
+// Schedule for 4am ET daily
+cron.schedule('0 4 * * *', runReminderCheck, {
   timezone: 'America/New_York'
 });
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
-  console.log('Reminder check scheduled for 5:10am ET daily');
+  console.log('Reminder check scheduled for 4am ET daily');
 });
